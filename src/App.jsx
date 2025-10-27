@@ -10,14 +10,14 @@ const APP_META = {
   browser: { title: 'Browser', icon: Globe, minSize: { w: 500, h: 360 } },
   terminal: { title: 'Terminal', icon: Terminal, minSize: { w: 420, h: 280 } },
   files: { title: 'Files', icon: Folder, minSize: { w: 400, h: 300 } },
-  settings: { title: 'Settings', icon: Settings, minSize: { w: 420, h: 320 } },
+  settings: { title: 'Settings', icon: Settings, minSize: { w: 460, h: 360 } },
 }
 
 function getRandomPos() {
-  const w = Math.max(360, Math.round(window.innerWidth * 0.4))
-  const h = Math.max(260, Math.round(window.innerHeight * 0.45))
+  const w = Math.max(360, Math.round(window.innerWidth * 0.45))
+  const h = Math.max(260, Math.round(window.innerHeight * 0.5))
   const x = Math.round(Math.random() * (window.innerWidth - w - 40)) + 20
-  const y = Math.round(Math.random() * (window.innerHeight - h - 100)) + 20
+  const y = Math.round(Math.random() * (window.innerHeight - h - 120)) + 20
   return { position: { x, y }, size: { w, h } }
 }
 
@@ -26,11 +26,26 @@ export default function App() {
   const [activeId, setActiveId] = useState(null)
   const [zTop, setZTop] = useState(10)
   const [showLauncher, setShowLauncher] = useState(false)
-  const [dark, setDark] = useState(true)
+
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem('webos:theme')
+    return saved ? saved === 'dark' : true
+  })
+  const [accent, setAccent] = useState(() => localStorage.getItem('webos:accent') || 'indigo')
+  const [wallpaper, setWallpaper] = useState(() => localStorage.getItem('webos:wallpaper') || 'aurora')
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('webos:theme', dark ? 'dark' : 'light')
   }, [dark])
+
+  useEffect(() => {
+    localStorage.setItem('webos:accent', accent)
+  }, [accent])
+
+  useEffect(() => {
+    localStorage.setItem('webos:wallpaper', wallpaper)
+  }, [wallpaper])
 
   const openApp = (appId) => {
     const meta = APP_META[appId]
@@ -44,6 +59,7 @@ export default function App() {
       icon: meta.icon,
       position,
       size,
+      minSize: meta.minSize,
       minimized: false,
       maximized: false,
       z: zTop + 1,
@@ -83,6 +99,10 @@ export default function App() {
     setWindows((prev) => prev.map((w) => (w.id === id ? { ...w, position } : w)))
   }
 
+  const resizeWindow = (id, size) => {
+    setWindows((prev) => prev.map((w) => (w.id === id ? { ...w, size } : w)))
+  }
+
   const activateFromTaskbar = (id) => {
     const win = windows.find((w) => w.id === id)
     if (!win) return
@@ -95,11 +115,14 @@ export default function App() {
     }
   }
 
-  const running = useMemo(() => windows.map((w) => ({ id: w.id, title: w.title, icon: w.icon })), [windows])
+  const running = useMemo(
+    () => windows.map((w) => ({ id: w.id, title: w.title, icon: w.icon })),
+    [windows]
+  )
 
   return (
     <div className="w-screen h-screen overflow-hidden relative">
-      <Desktop onOpen={openApp} />
+      <Desktop onOpen={openApp} wallpaper={wallpaper} />
 
       {windows.map((w) => (
         <Window
@@ -109,16 +132,21 @@ export default function App() {
           icon={w.icon}
           position={w.position}
           size={w.size}
+          minSize={w.minSize}
           minimized={w.minimized}
           maximized={w.maximized}
           zIndex={w.z}
           onDrag={dragWindow}
+          onResize={resizeWindow}
           onClose={closeWindow}
           onMinimize={minimizeWindow}
           onMaximize={maximizeWindow}
           onFocus={focusWindow}
         >
-          <AppContent appId={w.appId} />
+          <AppContent
+            appId={w.appId}
+            settings={{ dark, setDark, accent, setAccent, wallpaper, setWallpaper }}
+          />
         </Window>
       ))}
 
@@ -136,7 +164,7 @@ export default function App() {
   )
 }
 
-function AppContent({ appId }) {
+function AppContent({ appId, settings }) {
   switch (appId) {
     case 'notes':
       return <NotesApp />
@@ -147,14 +175,26 @@ function AppContent({ appId }) {
     case 'files':
       return <FilesApp />
     case 'settings':
-      return <SettingsApp />
+      return (
+        <SettingsApp
+          dark={settings.dark}
+          setDark={settings.setDark}
+          accent={settings.accent}
+          setAccent={settings.setAccent}
+          wallpaper={settings.wallpaper}
+          setWallpaper={settings.setWallpaper}
+        />
+      )
     default:
       return <div className="p-4">Unknown app</div>
   }
 }
 
 function NotesApp() {
-  const [text, setText] = useState('Welcome to your notes!\n\n- Jot thoughts\n- Draft ideas\n- Plan your next big win')
+  const [text, setText] = useState(() => localStorage.getItem('webos:notes') || 'Welcome to your notes!\n\n- Jot thoughts\n- Draft ideas\n- Plan your next big win')
+  useEffect(() => {
+    localStorage.setItem('webos:notes', text)
+  }, [text])
   return (
     <div className="w-full h-full flex flex-col">
       <div className="px-3 py-2 text-xs text-neutral-500 border-b border-neutral-200 dark:border-neutral-800">Notes</div>
@@ -213,7 +253,7 @@ function TerminalApp() {
     let output = ''
     switch (cmd) {
       case 'help':
-        output = 'commands: help, date, echo <text>, about'
+        output = 'commands: help, date, echo <text>, about, clear'
         break
       case 'date':
         output = new Date().toString()
@@ -221,6 +261,10 @@ function TerminalApp() {
       case 'about':
         output = 'This is a playful web OS terminal. Built with love.'
         break
+      case 'clear':
+        setLines([])
+        setInput('')
+        return
       default:
         if (cmd.startsWith('echo ')) output = cmd.slice(5)
         else output = `command not found: ${cmd}`
@@ -270,24 +314,82 @@ function FilesApp() {
   )
 }
 
-function SettingsApp() {
-  const [accent, setAccent] = useState('indigo')
+function SettingsApp({ dark, setDark, accent, setAccent, wallpaper, setWallpaper }) {
+  const swatches = [
+    { key: 'indigo', className: 'bg-indigo-500' },
+    { key: 'sky', className: 'bg-sky-500' },
+    { key: 'emerald', className: 'bg-emerald-500' },
+    { key: 'violet', className: 'bg-violet-500' },
+    { key: 'rose', className: 'bg-rose-500' },
+    { key: 'neutral', className: 'bg-neutral-500' },
+  ]
+  const wallpapers = [
+    { key: 'aurora', name: 'Aurora' },
+    { key: 'sunset', name: 'Sunset' },
+    { key: 'ocean', name: 'Ocean' },
+  ]
   return (
-    <div className="w-full h-full p-4 space-y-4">
+    <div className="w-full h-full p-4 space-y-6">
       <h3 className="text-lg font-semibold">Settings</h3>
+
+      <div className="space-y-2">
+        <div className="text-sm text-neutral-500">Appearance</div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setDark(false)}
+            className={`px-3 py-1.5 rounded-lg border text-sm ${!dark ? 'bg-neutral-900 text-white border-neutral-900' : 'bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-700'}`}
+          >
+            Light
+          </button>
+          <button
+            onClick={() => setDark(true)}
+            className={`px-3 py-1.5 rounded-lg border text-sm ${dark ? 'bg-neutral-900 text-white border-neutral-900' : 'bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-700'}`}
+          >
+            Dark
+          </button>
+        </div>
+      </div>
+
       <div className="space-y-2">
         <div className="text-sm text-neutral-500">Accent color</div>
         <div className="flex items-center gap-2">
-          {['indigo', 'sky', 'emerald', 'violet', 'rose'].map((c) => (
+          {swatches.map((s) => (
             <button
-              key={c}
-              onClick={() => setAccent(c)}
-              className={`w-8 h-8 rounded-full bg-${accent === c ? c : 'neutral'}-500`}
-              aria-label={c}
+              key={s.key}
+              onClick={() => setAccent(s.key)}
+              className={`w-8 h-8 rounded-full ${s.className} ring-2 ${accent === s.key ? 'ring-black dark:ring-white' : 'ring-transparent'}`}
+              aria-label={s.key}
             />
           ))}
         </div>
-        <p className="text-sm text-neutral-600 dark:text-neutral-300">This is a demo. Accent color updates here only.</p>
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-sm text-neutral-500">Wallpaper</div>
+        <div className="flex items-center gap-2">
+          {wallpapers.map((w) => (
+            <button
+              key={w.key}
+              onClick={() => setWallpaper(w.key)}
+              className={`px-3 py-1.5 rounded-lg border text-sm ${wallpaper === w.key ? 'bg-neutral-900 text-white border-neutral-900' : 'bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-700'}`}
+            >
+              {w.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <button
+          onClick={() => {
+            setDark(true)
+            setAccent('indigo')
+            setWallpaper('aurora')
+          }}
+          className="px-3 py-1.5 rounded-lg border text-sm bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+        >
+          Reset to defaults
+        </button>
       </div>
     </div>
   )

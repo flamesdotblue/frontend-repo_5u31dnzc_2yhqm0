@@ -12,10 +12,12 @@ export default function Window({
   children,
   position,
   size,
+  minSize = { w: 320, h: 220 },
   zIndex,
   minimized,
   maximized,
   onDrag,
+  onResize,
   onClose,
   onMinimize,
   onMaximize,
@@ -23,8 +25,11 @@ export default function Window({
 }) {
   const winRef = useRef(null)
   const [dragging, setDragging] = useState(false)
+  const [resizing, setResizing] = useState(false)
   const offsetRef = useRef({ x: 0, y: 0 })
+  const resizeStartRef = useRef({ w: 0, h: 0, x: 0, y: 0 })
 
+  // Dragging
   useEffect(() => {
     function onMouseMove(e) {
       if (!dragging) return
@@ -47,12 +52,45 @@ export default function Window({
     }
   }, [dragging, id, onDrag])
 
+  // Resizing
+  useEffect(() => {
+    function onMouseMove(e) {
+      if (!resizing) return
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const dx = e.clientX - resizeStartRef.current.x
+      const dy = e.clientY - resizeStartRef.current.y
+      const w = clamp(resizeStartRef.current.w + dx, minSize.w, vw)
+      const h = clamp(resizeStartRef.current.h + dy, minSize.h, vh)
+      onResize(id, { w, h })
+    }
+    function onMouseUp() {
+      setResizing(false)
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [resizing, id, onResize, minSize.w, minSize.h])
+
   const handleMouseDown = (e) => {
     if (maximized) return
     const rect = winRef.current?.getBoundingClientRect()
     if (!rect) return
     offsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
     setDragging(true)
+    onFocus(id)
+  }
+
+  const handleResizeMouseDown = (e) => {
+    e.stopPropagation()
+    if (maximized) return
+    const rect = winRef.current?.getBoundingClientRect()
+    if (!rect) return
+    resizeStartRef.current = { w: rect.width, h: rect.height, x: e.clientX, y: e.clientY }
+    setResizing(true)
     onFocus(id)
   }
 
@@ -120,8 +158,16 @@ export default function Window({
           </button>
         </div>
       </div>
-      <div className="w-full h-full bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100">
+      <div className="w-full h-full bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 relative">
         {children}
+        {!maximized && (
+          <div
+            onMouseDown={handleResizeMouseDown}
+            className="absolute right-0 bottom-0 w-4 h-4 cursor-se-resize bg-transparent"
+          >
+            <div className="absolute right-1 bottom-1 w-3 h-3 border-r-2 border-b-2 border-neutral-300 dark:border-neutral-600 pointer-events-none" />
+          </div>
+        )}
       </div>
     </div>
   )

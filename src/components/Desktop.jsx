@@ -7,10 +7,17 @@ const icons = [
   { id: 'files', name: 'Files', icon: Folder },
 ]
 
-export default function Desktop({ onOpen }) {
+const wallpapers = {
+  aurora: 'from-sky-100 via-indigo-100 to-fuchsia-100 dark:from-neutral-900 dark:via-neutral-950 dark:to-black',
+  sunset: 'from-rose-100 via-orange-100 to-amber-100 dark:from-rose-900 dark:via-fuchsia-950 dark:to-amber-950',
+  ocean: 'from-cyan-100 via-sky-100 to-indigo-100 dark:from-slate-900 dark:via-sky-950 dark:to-indigo-950',
+}
+
+export default function Desktop({ onOpen, wallpaper = 'aurora' }) {
+  const gradient = wallpapers[wallpaper] || wallpapers.aurora
   return (
     <div className="absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-sky-100 via-indigo-100 to-fuchsia-100 dark:from-neutral-900 dark:via-neutral-950 dark:to-black" />
+      <div className={`absolute inset-0 bg-gradient-to-br ${gradient}`} />
 
       <div className="absolute inset-0 opacity-[0.05]" aria-hidden>
         <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
